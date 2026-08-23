@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tether - Revenue Operations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans h-screen flex overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-900 text-white flex flex-col">
+        <div class="p-6">
+            <h1 class="text-2xl font-bold tracking-tight text-indigo-400">Tether</h1>
+            <p class="text-xs text-gray-400 mt-1">Autonomous Revenue Ops</p>
+        </div>
+        <nav class="flex-1 px-4 space-y-2">
+            <a href="#" class="block px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-700 transition"><i class="fas fa-chart-line mr-2"></i> Dashboard</a>
+            <a href="#" class="block px-4 py-2 rounded text-gray-300 hover:bg-gray-700 transition"><i class="fas fa-list mr-2"></i> Operations</a>
+            <a href="#" class="block px-4 py-2 rounded text-gray-300 hover:bg-gray-700 transition"><i class="fas fa-shield-alt mr-2"></i> Guardrails</a>
+            <a href="#" class="block px-4 py-2 rounded text-gray-300 hover:bg-gray-700 transition"><i class="fas fa-history mr-2"></i> Audit Trail</a>
+        </nav>
+        <div class="p-4 border-t border-gray-800">
+            <button id="runRecoveryBtn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-4 rounded shadow">
+                <i class="fas fa-play mr-2"></i> Run Recovery
+            </button>
+            <button id="resetBtn" class="w-full mt-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded shadow text-sm">
+                <i class="fas fa-undo mr-2"></i> Reset Demo
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto bg-gray-50">
+        <header class="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
+            <h2 class="text-xl font-semibold text-gray-800">Executive Dashboard</h2>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm text-gray-500" id="lastUpdated">Last updated: Just now</span>
+            </div>
+        </header>
+
+        <div class="p-8 max-w-7xl mx-auto space-y-8">
+            <!-- Hero Metrics -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div class="bg-white rounded-lg shadow p-6 border border-gray-100">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider">Revenue at Risk</h3>
+                    <p class="mt-2 text-3xl font-bold text-gray-900" id="metricRisk">$0.00</p>
+                    <p class="mt-1 text-sm text-gray-500"><span id="metricCases">0</span> active cases</p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6 border border-indigo-100 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 text-indigo-600">
+                        <i class="fas fa-sack-dollar text-4xl"></i>
+                    </div>
+                    <h3 class="text-sm font-medium text-indigo-600 uppercase tracking-wider">Money Recovered</h3>
+                    <p class="mt-2 text-3xl font-bold text-indigo-700" id="metricRecovered">$0.00</p>
+                    <p class="mt-1 text-sm text-indigo-500">Net recovered via Tether</p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6 border border-gray-100">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider">Automation Rate</h3>
+                    <p class="mt-2 text-3xl font-bold text-gray-900" id="metricAutomation">0%</p>
+                    <p class="mt-1 text-sm text-gray-500">Resolved without human</p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6 border border-gray-100">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider">Escalations</h3>
+                    <p class="mt-2 text-3xl font-bold text-red-600" id="metricEscalated">0</p>
+                    <p class="mt-1 text-sm text-gray-500">Requires manual review</p>
+                </div>
+            </div>
+
+            <!-- Dashboard Body -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Operations View -->
+                <div class="lg:col-span-2 bg-white rounded-lg shadow border border-gray-100 flex flex-col h-[500px]">
+                    <div class="px-6 py-4 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-900">Recovery Operations</h3>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-0">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">At Risk</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">AI Diagnosis</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200" id="opsTableBody">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Audit Log -->
+                <div class="bg-white rounded-lg shadow border border-gray-100 flex flex-col h-[500px]">
+                    <div class="px-6 py-4 border-b border-gray-100">
+                        <h3 class="text-lg font-semibold text-gray-900">Agent Activity</h3>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4" id="auditLogContainer">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
