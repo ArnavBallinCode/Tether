@@ -3,7 +3,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import uvicorn
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 from tether.simulator.data_generator import seed_database
 from tether.simulator.engine import SimulatedDB, SimulatedCustomerRepository, SimulatedPaymentProvider, SimulatedCommunicationProvider

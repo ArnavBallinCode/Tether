@@ -1,8 +1,10 @@
 import json
 import uuid
+import logging
 from datetime import datetime
 from typing import List, Optional
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 from tether.domain.models import RecoveryOpportunity, ActionType, Intervention, RiskLevel, AuditLogEntry, Transaction
 from tether.domain.interfaces import PaymentProvider, CommunicationProvider, CustomerRepository
