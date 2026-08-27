@@ -4,14 +4,16 @@ uvicorn==0.32.*
 pydantic==2.9.*
 pydantic-settings==2.5.*
 
-# AI & Data
+# AI & Machine Learning
 anthropic==0.39.*
 numpy==1.26.*
 pandas==2.2.*
+scikit-learn==1.5.*
+lightgbm==4.5.*
+joblib==1.4.*
 
 # Utilities
 python-dotenv==1.0.*
-loguru==0.7.*
 Faker==28.4.*
 
 # Testing
