@@ -68,9 +68,9 @@ async function updateDashboard() {
             
             let detailsHtml = '';
             if (log.action === 'Diagnose') {
-                detailsHtml = `Diagnosed as ${log.details.risk_level} risk. Cause: ${log.details.likely_cause}`;
-            } else if (log.action === 'Plan') {
-                detailsHtml = `Proposed action: ${log.details.action} (${(log.details.probability * 100).toFixed(0)}% confidence)<br/><span class="text-xs italic text-gray-400">${log.details.reasoning}</span>`;
+                detailsHtml = `Diagnosed as ${log.details.risk_level} risk. Cause: ${log.details.likely_cause}. PRS: ${log.details.prs_score}`;
+            } else if (log.action === 'Plan (EIV)') {
+                detailsHtml = `Selected action: ${log.details.action} (EIV: $${log.details.expected_incremental_value})<br/><span class="text-xs italic text-gray-400">Prob: ${(log.details.probability * 100).toFixed(0)}%</span>`;
             } else if (log.action === 'Policy Validation') {
                 detailsHtml = log.passed_guardrails ? 
                     `<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i> Guardrail passed</span>` : 
