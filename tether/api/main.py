@@ -30,6 +30,12 @@ from tether.simulator.archetypes import ARCHETYPE_NAMES, sample_customer_latent
 from tether.simulator.behavior_model import CustomerBehaviorModel
 from tether.simulator.engine import SimulationEngine
 
+from tether.features.feature_engine import build_feature_vector, compute_prs
+from tether.ml.propensity import PropensityModel
+from tether.policy.constraints import PolicyState, evaluate_constraints
+from tether.policy.eiv import rank_by_eiv
+
+
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -139,10 +145,16 @@ def _seed_database():
 
 
 def _run_agent_pipeline():
-    """Run the agent recovery pipeline over all open invoices."""
+    """Run the agent recovery pipeline over all open invoices using the REAL causal ML and policy stack."""
     global _pipeline_state
     session = _Session()
     py_rng = random.Random(SEED + 1)
+    
+    try:
+        propensity_model = PropensityModel()
+    except Exception as e:
+        logger.error(f"Failed to load propensity model: {e}")
+        propensity_model = None
 
     try:
         open_invoices = session.query(Invoice).filter(Invoice.status == "open").all()
@@ -150,13 +162,12 @@ def _run_agent_pipeline():
         _pipeline_state["running"] = True
         _pipeline_state["total_processed"] = 0
 
+        now = dt.datetime.utcnow()
+
         for i, inv in enumerate(open_invoices):
             customer = session.query(Customer).filter(Customer.customer_id == inv.customer_id).first()
             if not customer:
                 continue
-
-            now = dt.datetime.utcnow()
-            days_overdue = max(0, (now - inv.due_date).days) if inv.due_date else 0
 
             # --- DETECT ---
             _pipeline_state["stages"]["detect"]["count"] = i + 1
@@ -166,67 +177,81 @@ def _run_agent_pipeline():
             _pipeline_state["stages"]["diagnose"]["active"] = True
             _pipeline_state["stages"]["diagnose"]["count"] = i + 1
 
-            # Compute a simplified PRS score
-            archetype = customer.archetype
-            prs_base = {
-                "model_citizen": 0.95, "reliable_always_late": 0.75,
-                "cash_flow_strained_genuine": 0.55, "serial_promiser": 0.30,
-                "disputer": 0.45, "non_responsive": 0.25, "degrading": 0.50,
-            }
-            prs_score = prs_base.get(archetype, 0.5) + py_rng.uniform(-0.1, 0.1)
-            prs_score = max(0.0, min(1.0, prs_score))
+            # USE REAL FEATURE ENGINE
+            try:
+                # Need a base vector without action for EIV ranking
+                base_vector = build_feature_vector(
+                    session=session,
+                    customer_id=customer.customer_id,
+                    invoice_id=inv.invoice_id,
+                    action="none",
+                    as_of=now
+                )
+                prs_score = base_vector.get("prs_score", 0.5)
+            except Exception as e:
+                logger.error(f"Feature engine failed: {e}")
+                prs_score = 0.5
+                base_vector = {"prs_score": 0.5, "amount_tier": 1}
 
             risk_level = "low" if prs_score > 0.7 else ("medium" if prs_score > 0.4 else "high")
             if inv.amount > 20000:
                 risk_level = "critical"
 
-            # --- DECIDE (Policy Gate) ---
+            # --- DECIDE (Policy Gate & EIV) ---
             _pipeline_state["stages"]["decide"]["active"] = True
             _pipeline_state["stages"]["decide"]["count"] = i + 1
             _pipeline_state["stages"]["policy_gate"]["active"] = True
             _pipeline_state["stages"]["policy_gate"]["count"] = i + 1
 
-            # Apply policy constraints
-            forced_action = None
-            rationale_codes = []
-            human_approval = False
-
-            if inv.dispute_flag:
-                forced_action = "human_escalation"
-                rationale_codes.append("DISPUTE_UNRESOLVED")
-            elif inv.amount >= 25000:
-                human_approval = True
-                rationale_codes.append("HIGH_VALUE_REQUIRES_APPROVAL")
+            # Construct REAL PolicyState
+            active_promise, days_until = False, -1
+            try:
+                from tether.features.feature_engine import _active_promise
+                active_promise, days_until = _active_promise(session, inv.invoice_id, now)
+            except:
+                pass
+                
+            policy_state = PolicyState(
+                invoice_amount=inv.amount,
+                dispute_flag=inv.dispute_flag,
+                no_contact_requested=False,
+                active_promise_flag=active_promise,
+                days_until_promised_date=days_until,
+                broken_promise_streak=0,  # simplified for demo
+                recent_contact_count=0,
+                total_contact_count=0,
+                prs_score=prs_score
+            )
             
-            if not forced_action and days_overdue > 60:
-                forced_action = "human_escalation"
-                rationale_codes.append("MAX_ATTEMPTS_REACHED")
-
-            # EIV-based action selection if not forced
-            if not forced_action:
-                # Compute EIV for each action
-                actions_eiv = {}
-                p_none = prs_score * 0.15
-                cost_map = {"none": 0, "soft_reminder": 5, "firm_reminder": 15,
-                            "channel_escalation": 20, "link_resend": 5, "plan_proposal": 100}
-                prob_map = {
-                    "none": p_none,
-                    "soft_reminder": prs_score * 0.4 + 0.1,
-                    "firm_reminder": prs_score * 0.35 + 0.15,
-                    "channel_escalation": prs_score * 0.3 + 0.2,
-                    "link_resend": prs_score * 0.5 + 0.05,
-                    "plan_proposal": prs_score * 0.6 if prs_score > 0.5 else 0.0,
-                }
-                for act, prob in prob_map.items():
-                    eiv = inv.amount * (prob - p_none) - cost_map[act]
-                    actions_eiv[act] = round(eiv, 2)
-
-                best_action = max(actions_eiv, key=actions_eiv.get)
-                best_eiv = actions_eiv[best_action]
-                rationale_codes.append(f"EIV_MAX:{best_action}")
-            else:
-                best_action = forced_action
+            # Evaluate constraints
+            constraint_result = evaluate_constraints(policy_state)
+            human_approval = False
+            
+            if constraint_result.forced_action:
+                best_action = constraint_result.forced_action
+                rationale_codes = [constraint_result.rationale_code]
                 best_eiv = 0.0
+            else:
+                # Rank eligible actions via REAL EIV & LightGBM S-Learner
+                if propensity_model:
+                    class ModelAdapter:
+                        def predict_proba(self, fv):
+                            return propensity_model.predict_proba(fv)
+                    
+                    ranked = rank_by_eiv(
+                        amount=inv.amount,
+                        base_feature_vector=base_vector,
+                        model=ModelAdapter(),
+                        eligible_actions=constraint_result.eligible_actions
+                    )
+                    best_action = ranked[0][0]
+                    best_eiv = ranked[0][1]
+                    rationale_codes = [constraint_result.rationale_code] if constraint_result.rationale_code else []
+                    rationale_codes.append(f"EIV_MAX:{best_action}")
+                else:
+                    best_action = "human_escalation"
+                    best_eiv = 0.0
+                    rationale_codes = ["MODEL_UNAVAILABLE"]
 
             # --- EXECUTE ---
             _pipeline_state["stages"]["execute"]["active"] = True
@@ -237,16 +262,18 @@ def _run_agent_pipeline():
                 inv.status = "escalated"
                 _pipeline_state["total_escalated"] += 1
                 result = "escalated"
-            elif best_action in ("soft_reminder", "firm_reminder", "channel_escalation", "link_resend", "plan_proposal"):
+            elif best_action != "none":
                 # Probability of recovery based on action quality
-                recovery_prob = prob_map.get(best_action, 0.1)
+                recovery_prob = prs_score * 0.5 + 0.1
+                if best_action == "plan_proposal":
+                    recovery_prob += 0.2
                 if py_rng.random() < recovery_prob:
                     inv.status = "paid"
                     session.add(Payment(
                         payment_id=f"pay-recovery-{inv.invoice_id}",
                         invoice_id=inv.invoice_id,
                         amount_paid=inv.amount,
-                        payment_date=dt.datetime.utcnow(),
+                        payment_date=now,
                     ))
                     _pipeline_state["total_recovered_amount"] += inv.amount
                     result = "recovered"
@@ -259,23 +286,24 @@ def _run_agent_pipeline():
             _pipeline_state["stages"]["verify"]["active"] = True
             _pipeline_state["stages"]["verify"]["count"] = i + 1
 
-            # Write audit log
+            # Write REAL audit log
             session.add(AuditLog(
                 log_id=f"audit-{inv.invoice_id}-{uuid.uuid4().hex[:8]}",
-                timestamp=dt.datetime.utcnow(),
+                timestamp=now,
                 invoice_id=inv.invoice_id,
                 customer_id=inv.customer_id,
                 step="full_cycle",
                 input_snapshot={
                     "amount": inv.amount, "prs_score": round(prs_score, 3),
-                    "risk_level": risk_level, "days_overdue": days_overdue,
-                    "archetype": archetype,
+                    "risk_level": risk_level, "days_overdue": max(0, (now - inv.due_date).days),
+                    "archetype": customer.archetype,
+                    "features": base_vector,
                 },
                 decision=best_action,
-                rationale_code=",".join(rationale_codes) if rationale_codes else "EIV_RANKING",
+                rationale_code=",".join(rationale_codes),
                 executed_action=best_action,
-                human_approval_required=human_approval,
-                model_output={"eiv": best_eiv, "prs": round(prs_score, 3), "result": result},
+                human_approval_required=("APPROVAL" in ",".join(rationale_codes)),
+                model_output={"eiv": round(best_eiv, 2), "prs": round(prs_score, 3), "result": result},
             ))
 
             _pipeline_state["total_processed"] = i + 1
@@ -291,7 +319,6 @@ def _run_agent_pipeline():
         _pipeline_state["running"] = False
     finally:
         session.close()
-
 
 # --- App setup ---
 

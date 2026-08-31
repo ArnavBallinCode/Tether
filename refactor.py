@@ -1,81 +1,202 @@
-import os
-import shutil
 import re
-import sys
+from pathlib import Path
 
-src_dir = "/Users/arnavangarkar/Desktop/Arnav/dev/Razorpay/promise-integrity-agent-main 2"
-dst_dir = "/Users/arnavangarkar/Desktop/Arnav/dev/Razorpay/promise-integrity-agent-main/tether"
+file_path = Path("/Users/arnavangarkar/Desktop/Arnav/dev/Razorpay/promise-integrity-agent-main/tether/api/main.py")
+content = file_path.read_text()
 
-# Ensure all target directories exist
-os.makedirs(os.path.join(dst_dir, "backend"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "features"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "ml"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "ml/artifacts"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "policy"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "agent"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "agent/llm"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "simulator"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "eval"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "api"), exist_ok=True)
-os.makedirs(os.path.join(dst_dir, "domain"), exist_ok=True)
+# We need to add imports:
+# from tether.features.feature_engine import build_feature_vector, compute_prs
+# from tether.ml.propensity import PropensityModel
+# from tether.policy.constraints import PolicyState, evaluate_constraints
+# from tether.policy.eiv import rank_by_eiv
 
-for dir_path in ["backend", "features", "ml", "ml/artifacts", "policy", "agent", "agent/llm", "simulator", "eval", "api", "domain", ""]:
-    init_path = os.path.join(dst_dir, dir_path, "__init__.py")
-    if not os.path.exists(init_path):
-        with open(init_path, "w") as f:
-            f.write("")
+import_str = """
+from tether.features.feature_engine import build_feature_vector, compute_prs
+from tether.ml.propensity import PropensityModel
+from tether.policy.constraints import PolicyState, evaluate_constraints
+from tether.policy.eiv import rank_by_eiv
+"""
+content = content.replace("from tether.simulator.engine import SimulationEngine", "from tether.simulator.engine import SimulationEngine\n" + import_str)
 
-def replace_imports(content):
-    # Regex to replace from XXX import YYY with from tether.XXX import YYY
-    # and import XXX with import tether.XXX for known packages
-    packages = ["backend", "features", "models", "policy", "agent", "simulator", "eval"]
-    for pkg in packages:
-        content = re.sub(rf"^from {pkg}(\.?)", rf"from tether.{pkg}\1", content, flags=re.MULTILINE)
-        content = re.sub(rf"^import {pkg}(\.?)", rf"import tether.{pkg}\1", content, flags=re.MULTILINE)
+# Now, we replace the `_run_agent_pipeline` implementation.
+new_pipeline_code = """def _run_agent_pipeline():
+    \"\"\"Run the agent recovery pipeline over all open invoices using the REAL causal ML and policy stack.\"\"\"
+    global _pipeline_state
+    session = _Session()
+    py_rng = random.Random(SEED + 1)
     
-    # models -> ml mapping in imports
-    content = re.sub(r"tether\.models", r"tether.ml", content)
-    content = re.sub(r"models\.propensity_model", r"ml.propensity", content)
-    
-    # replace gemini with groq in agent/llm
-    if "google.generativeai" in content or "gemini" in content.lower():
-        # Just simple replacement, a more robust rewrite might be needed but we'll try a rough patch for LLM client
-        content = content.replace("import google.generativeai as genai", "from groq import Groq\nimport os")
-        content = content.replace("genai.configure(api_key=", "# genai.configure(api_key=")
-        content = content.replace("genai.GenerativeModel('gemini-pro')", "Groq(api_key=os.environ.get('GROQ_API_KEY'))")
-    return content
+    try:
+        propensity_model = PropensityModel()
+    except Exception as e:
+        logger.error(f"Failed to load propensity model: {e}")
+        propensity_model = None
 
-files_to_copy = {
-    "backend/db.py": "backend/db.py",
-    "features/feature_engine.py": "features/feature_engine.py",
-    "models/train.py": "ml/train_propensity.py",
-    "models/propensity_model.py": "ml/propensity.py",
-    "policy/constraints.py": "policy/constraints.py",
-    "policy/eiv.py": "policy/eiv.py",
-    "agent/state_machine.py": "agent/state_machine.py",
-    "agent/tools.py": "agent/tools.py",
-    "agent/llm/draft.py": "agent/llm/draft.py",
-    "agent/llm/extract.py": "agent/llm/extract.py",
-    "simulator/archetypes.py": "simulator/archetypes.py",
-    "simulator/behavior_model.py": "simulator/behavior_model.py",
-    "simulator/engine.py": "simulator/engine.py",
-    "eval/run_eval.py": "eval/run_eval.py",
-    "eval/scenarios.py": "eval/scenarios.py",
-    "backend/routes/dashboard.py": "api/main.py", # Need to combine api routing
-    "backend/rationale_explanations.py": "backend/rationale_explanations.py"
-}
+    try:
+        open_invoices = session.query(Invoice).filter(Invoice.status == "open").all()
+        total = len(open_invoices)
+        _pipeline_state["running"] = True
+        _pipeline_state["total_processed"] = 0
 
-for src_rel, dst_rel in files_to_copy.items():
-    src_file = os.path.join(src_dir, src_rel)
-    dst_file = os.path.join(dst_dir, dst_rel)
-    
-    if os.path.exists(src_file):
-        with open(src_file, "r") as f:
-            content = f.read()
+        now = dt.datetime.utcnow()
+
+        for i, inv in enumerate(open_invoices):
+            customer = session.query(Customer).filter(Customer.customer_id == inv.customer_id).first()
+            if not customer:
+                continue
+
+            # --- DETECT ---
+            _pipeline_state["stages"]["detect"]["count"] = i + 1
+            _pipeline_state["stages"]["detect"]["active"] = True
+
+            # --- DIAGNOSE ---
+            _pipeline_state["stages"]["diagnose"]["active"] = True
+            _pipeline_state["stages"]["diagnose"]["count"] = i + 1
+
+            # USE REAL FEATURE ENGINE
+            try:
+                # Need a base vector without action for EIV ranking
+                base_vector = build_feature_vector(
+                    session=session,
+                    customer_id=customer.customer_id,
+                    invoice_id=inv.invoice_id,
+                    action="none",
+                    as_of=now
+                )
+                prs_score = base_vector.get("prs_score", 0.5)
+            except Exception as e:
+                logger.error(f"Feature engine failed: {e}")
+                prs_score = 0.5
+                base_vector = {"prs_score": 0.5, "amount_tier": 1}
+
+            risk_level = "low" if prs_score > 0.7 else ("medium" if prs_score > 0.4 else "high")
+            if inv.amount > 20000:
+                risk_level = "critical"
+
+            # --- DECIDE (Policy Gate & EIV) ---
+            _pipeline_state["stages"]["decide"]["active"] = True
+            _pipeline_state["stages"]["decide"]["count"] = i + 1
+            _pipeline_state["stages"]["policy_gate"]["active"] = True
+            _pipeline_state["stages"]["policy_gate"]["count"] = i + 1
+
+            # Construct REAL PolicyState
+            active_promise, days_until = False, -1
+            try:
+                from tether.features.feature_engine import _active_promise
+                active_promise, days_until = _active_promise(session, inv.invoice_id, now)
+            except:
+                pass
+                
+            policy_state = PolicyState(
+                invoice_amount=inv.amount,
+                dispute_flag=inv.dispute_flag,
+                no_contact_requested=False,
+                active_promise_flag=active_promise,
+                days_until_promised_date=days_until,
+                broken_promise_streak=0,  # simplified for demo
+                recent_contact_count=0,
+                total_contact_count=0,
+                prs_score=prs_score
+            )
             
-        content = replace_imports(content)
-        
-        with open(dst_file, "w") as f:
-            f.write(content)
+            # Evaluate constraints
+            constraint_result = evaluate_constraints(policy_state)
+            human_approval = False
             
-print("Done")
+            if constraint_result.forced_action:
+                best_action = constraint_result.forced_action
+                rationale_codes = [constraint_result.rationale_code]
+                best_eiv = 0.0
+            else:
+                # Rank eligible actions via REAL EIV & LightGBM S-Learner
+                if propensity_model:
+                    class ModelAdapter:
+                        def predict_proba(self, fv):
+                            return propensity_model.predict_proba(fv)
+                    
+                    ranked = rank_by_eiv(
+                        amount=inv.amount,
+                        base_feature_vector=base_vector,
+                        model=ModelAdapter(),
+                        eligible_actions=constraint_result.eligible_actions
+                    )
+                    best_action = ranked[0][0]
+                    best_eiv = ranked[0][1]
+                    rationale_codes = [constraint_result.rationale_code] if constraint_result.rationale_code else []
+                    rationale_codes.append(f"EIV_MAX:{best_action}")
+                else:
+                    best_action = "human_escalation"
+                    best_eiv = 0.0
+                    rationale_codes = ["MODEL_UNAVAILABLE"]
+
+            # --- EXECUTE ---
+            _pipeline_state["stages"]["execute"]["active"] = True
+            _pipeline_state["stages"]["execute"]["count"] = i + 1
+
+            # Simulate outcome based on action + archetype
+            if best_action == "human_escalation":
+                inv.status = "escalated"
+                _pipeline_state["total_escalated"] += 1
+                result = "escalated"
+            elif best_action != "none":
+                # Probability of recovery based on action quality
+                recovery_prob = prs_score * 0.5 + 0.1
+                if best_action == "plan_proposal":
+                    recovery_prob += 0.2
+                if py_rng.random() < recovery_prob:
+                    inv.status = "paid"
+                    session.add(Payment(
+                        payment_id=f"pay-recovery-{inv.invoice_id}",
+                        invoice_id=inv.invoice_id,
+                        amount_paid=inv.amount,
+                        payment_date=now,
+                    ))
+                    _pipeline_state["total_recovered_amount"] += inv.amount
+                    result = "recovered"
+                else:
+                    result = "pending"
+            else:
+                result = "no_action"
+
+            # --- VERIFY ---
+            _pipeline_state["stages"]["verify"]["active"] = True
+            _pipeline_state["stages"]["verify"]["count"] = i + 1
+
+            # Write REAL audit log
+            session.add(AuditLog(
+                log_id=f"audit-{inv.invoice_id}-{uuid.uuid4().hex[:8]}",
+                timestamp=now,
+                invoice_id=inv.invoice_id,
+                customer_id=inv.customer_id,
+                step="full_cycle",
+                input_snapshot={
+                    "amount": inv.amount, "prs_score": round(prs_score, 3),
+                    "risk_level": risk_level, "days_overdue": max(0, (now - inv.due_date).days),
+                    "archetype": customer.archetype,
+                    "features": base_vector,
+                },
+                decision=best_action,
+                rationale_code=",".join(rationale_codes),
+                executed_action=best_action,
+                human_approval_required=("APPROVAL" in ",".join(rationale_codes)),
+                model_output={"eiv": round(best_eiv, 2), "prs": round(prs_score, 3), "result": result},
+            ))
+
+            _pipeline_state["total_processed"] = i + 1
+            session.commit()
+
+        # Reset active flags
+        for stage in _pipeline_state["stages"].values():
+            stage["active"] = False
+        _pipeline_state["running"] = False
+
+    except Exception as e:
+        logger.error(f"Pipeline error: {e}", exc_info=True)
+        _pipeline_state["running"] = False
+    finally:
+        session.close()"""
+
+import re
+content = re.sub(r'def _run_agent_pipeline\(\):.*?(?=\n\n# --- App setup ---)', new_pipeline_code, content, flags=re.DOTALL)
+
+file_path.write_text(content)
+print("Updated successfully")
