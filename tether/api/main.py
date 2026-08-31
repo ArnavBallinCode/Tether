@@ -198,9 +198,8 @@ def _run_agent_pipeline():
             try:
                 base_vector = build_feature_vector(
                     session=session,
-                    customer_id=customer.customer_id,
                     invoice_id=inv.invoice_id,
-                    action="none",
+                    intervention_type="none",
                     as_of=now
                 )
                 prs_score = base_vector.get("prs_score", 0.5)
@@ -237,8 +236,8 @@ def _run_agent_pipeline():
                 active_promise_flag=active_promise,
                 days_until_promised_date=days_until,
                 broken_promise_streak=0,
-                recent_contact_count=0,
-                total_contact_count=0,
+                contacts_in_last_3_days=0,
+                total_automated_contacts_this_invoice=0,
                 prs_score=prs_score
             )
             
@@ -255,14 +254,12 @@ def _run_agent_pipeline():
                         def predict_proba(self, fv):
                             return propensity_model.predict_proba(fv)
                     
-                    ranked = rank_by_eiv(
-                        amount=inv.amount,
-                        base_feature_vector=base_vector,
+                    best_action, best_eiv = rank_by_eiv(
+                        invoice_amount=inv.amount,
+                        base_features=base_vector,
                         model=ModelAdapter(),
                         eligible_actions=constraint_result.eligible_actions
                     )
-                    best_action = ranked[0][0]
-                    best_eiv = ranked[0][1]
                     rationale_codes = [constraint_result.rationale_code] if constraint_result.rationale_code else []
                     rationale_codes.append(f"EIV_MAX:{best_action}")
                 else:

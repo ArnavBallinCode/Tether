@@ -20,7 +20,16 @@ from typing import Optional
 
 from groq import Groq
 
-from tether.agent.llm._retry import call_with_retry
+import time
+
+def call_with_retry(func, retries=3):
+    for i in range(retries):
+        try:
+            return func()
+        except Exception as e:
+            if i == retries - 1:
+                raise
+            time.sleep(1)
 
 GROQ_MODEL = "llama3-8b-8192"
 

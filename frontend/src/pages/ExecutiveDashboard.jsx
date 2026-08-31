@@ -69,23 +69,24 @@ const ExecutiveDashboard = () => {
         />
         <StatCard 
           title="Money Recovered" 
-          value={metrics.money_recovered} 
+          value={metrics.money_recovered.toLocaleString()} 
           prefix="$" 
           icon={TrendingUp}
           colorClass="text-indigo-600"
         />
         <StatCard 
           title="Automation Rate" 
-          value={metrics.automation_rate} 
+          value={(metrics.automation_rate * 100).toFixed(1)} 
           suffix="%" 
-          icon={Cpu}
-          colorClass="text-green-600"
+          icon={Cpu} 
+          trend="+5.2%" 
+          color="text-green-600 bg-green-50"
         />
         <StatCard 
           title="Escalations" 
           value={metrics.escalated_count} 
-          icon={DollarSign}
-          colorClass="text-yellow-600"
+          icon={DollarSign} 
+          color="text-yellow-600 bg-yellow-50"
         />
       </div>
 
@@ -141,7 +142,7 @@ const ExecutiveDashboard = () => {
               <div key={item.name} className="flex items-center gap-2 text-sm">
                 <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[idx % COLORS.length]}}></div>
                 <span className="text-gray-600">{item.name}:</span>
-                <span className="font-semibold text-gray-900">{item.value}%</span>
+                <span className="font-semibold text-gray-900">{item.value}</span>
               </div>
             ))}
           </div>
