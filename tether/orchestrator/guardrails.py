@@ -4,7 +4,7 @@ from tether.domain.models import RecoveryOpportunity, ActionType, Intervention, 
 
 class PolicyGuard:
     MAX_RETRIES = 3
-    HUMAN_REVIEW_THRESHOLD_USD = 10000
+    HUMAN_REVIEW_THRESHOLD_USD = 800
     
     @classmethod
     def validate_action(cls, opp: RecoveryOpportunity, customer: Customer, action: ActionType) -> Tuple[bool, str]:
