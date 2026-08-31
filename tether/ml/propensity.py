@@ -43,17 +43,18 @@ class PropensityModel:
             return self.model.predict(features)[0]
             
         # Fallback to realistic mathematical heuristic based on features
-        base_prob = prs_score * 0.5
+        base_prob = prs_score * 0.4
         if action == "retry_payment":
-            return min(0.99, base_prob + 0.1) if opportunity.retry_count < 2 else base_prob * 0.1
+            return min(0.99, base_prob + 0.45) if opportunity.retry_count < 2 else base_prob * 0.1
         elif action == "request_update":
-            return min(0.99, base_prob + 0.3)
+            return min(0.99, base_prob + 0.25)
         elif action == "send_reminder":
-            return min(0.99, base_prob + 0.05)
+            return min(0.99, base_prob + 0.15)
         elif action == "escalate_to_human":
-            return 0.8  # Humans are effective but costly
+            # Humans add a flat 20% bump on top of base probability, but are expensive
+            return min(0.99, base_prob + 0.20)
         elif action == "none":
-            return base_prob * 0.2
+            return base_prob * 0.1
         return base_prob
 
 class EIVCalculator:
