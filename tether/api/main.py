@@ -39,8 +39,9 @@ N_DAYS = 60
 REFERENCE_START = dt.datetime(2025, 7, 1)
 SEGMENTS = ["SMB", "Mid-Market", "Enterprise"]
 
-# In-memory SQLite
-_engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+# Use a file-backed SQLite DB for the demo so it works across FastAPI worker threads
+DB_PATH = REPO_ROOT / "demo.db"
+_engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
 _Session = sessionmaker(bind=_engine)
 
 # Pipeline state tracking for the UI
@@ -61,7 +62,8 @@ _pipeline_state = {
 
 
 def _seed_database():
-    """Populate the in-memory DB with simulated customers and invoices."""
+    """Populate the file-backed DB with simulated customers and invoices."""
+    Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)
     session = _Session()
     rng = np.random.default_rng(SEED)
