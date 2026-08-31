@@ -31,7 +31,7 @@ def call_with_retry(func, retries=3):
                 raise
             time.sleep(1)
 
-GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 TONE_GUIDANCE = {
     "soft_reminder": "friendly and light-touch -- a gentle nudge, warm in tone, assumes good faith and that this is likely just an oversight",

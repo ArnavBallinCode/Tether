@@ -172,13 +172,12 @@ def _run_agent_pipeline():
         _pipeline_state["running"] = True
         _pipeline_state["total_processed"] = 0
 
-        now = dt.datetime.utcnow()
-
         def reset_active():
             for st in _pipeline_state["stages"].values():
                 st["active"] = False
 
         for i, inv in enumerate(open_invoices):
+            now = dt.datetime.utcnow()
             customer = session.query(Customer).filter(Customer.customer_id == inv.customer_id).first()
             if not customer:
                 continue
