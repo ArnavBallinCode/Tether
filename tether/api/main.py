@@ -1,3 +1,4 @@
+from __future__ import annotations
 import time
 """
 tether/api/main.py — FastAPI server for Tether demo.
@@ -6,7 +7,6 @@ Seeds an in-memory SQLite DB with simulated customer/invoice data on startup,
 runs the real agent pipeline on /api/run_recovery, and serves the React
 frontend from frontend/dist/.
 """
-from __future__ import annotations
 
 import datetime as dt
 import os
