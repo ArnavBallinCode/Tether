@@ -1,3 +1,4 @@
+import time
 """
 tether/api/main.py — FastAPI server for Tether demo.
 
@@ -173,22 +174,28 @@ def _run_agent_pipeline():
 
         now = dt.datetime.utcnow()
 
+        def reset_active():
+            for st in _pipeline_state["stages"].values():
+                st["active"] = False
+
         for i, inv in enumerate(open_invoices):
             customer = session.query(Customer).filter(Customer.customer_id == inv.customer_id).first()
             if not customer:
                 continue
 
             # --- DETECT ---
-            _pipeline_state["stages"]["detect"]["count"] = i + 1
+            reset_active()
             _pipeline_state["stages"]["detect"]["active"] = True
+            _pipeline_state["stages"]["detect"]["count"] = i + 1
+            time.sleep(0.3)
 
             # --- DIAGNOSE ---
+            reset_active()
             _pipeline_state["stages"]["diagnose"]["active"] = True
             _pipeline_state["stages"]["diagnose"]["count"] = i + 1
 
             # USE REAL FEATURE ENGINE
             try:
-                # Need a base vector without action for EIV ranking
                 base_vector = build_feature_vector(
                     session=session,
                     customer_id=customer.customer_id,
@@ -205,8 +212,11 @@ def _run_agent_pipeline():
             risk_level = "low" if prs_score > 0.7 else ("medium" if prs_score > 0.4 else "high")
             if inv.amount > 20000:
                 risk_level = "critical"
+                
+            time.sleep(0.3)
 
             # --- DECIDE (Policy Gate & EIV) ---
+            reset_active()
             _pipeline_state["stages"]["decide"]["active"] = True
             _pipeline_state["stages"]["decide"]["count"] = i + 1
             _pipeline_state["stages"]["policy_gate"]["active"] = True
@@ -226,13 +236,12 @@ def _run_agent_pipeline():
                 no_contact_requested=False,
                 active_promise_flag=active_promise,
                 days_until_promised_date=days_until,
-                broken_promise_streak=0,  # simplified for demo
+                broken_promise_streak=0,
                 recent_contact_count=0,
                 total_contact_count=0,
                 prs_score=prs_score
             )
             
-            # Evaluate constraints
             constraint_result = evaluate_constraints(policy_state)
             human_approval = False
             
@@ -241,7 +250,6 @@ def _run_agent_pipeline():
                 rationale_codes = [constraint_result.rationale_code]
                 best_eiv = 0.0
             else:
-                # Rank eligible actions via REAL EIV & LightGBM S-Learner
                 if propensity_model:
                     class ModelAdapter:
                         def predict_proba(self, fv):
@@ -262,17 +270,46 @@ def _run_agent_pipeline():
                     best_eiv = 0.0
                     rationale_codes = ["MODEL_UNAVAILABLE"]
 
+            time.sleep(0.4)
+
             # --- EXECUTE ---
+            reset_active()
             _pipeline_state["stages"]["execute"]["active"] = True
             _pipeline_state["stages"]["execute"]["count"] = i + 1
 
-            # Simulate outcome based on action + archetype
+            draft_text = None
+            if best_action in ["soft_reminder", "firm_reminder", "channel_escalation", "link_resend", "plan_proposal"]:
+                try:
+                    if llm_draft_tool:
+                        draft_result = llm_draft_tool.draft(action_type=best_action, context={
+                            "customer_id": customer.name,
+                            "invoice_id": inv.invoice_id,
+                            "relative_lateness": max(0, (now - inv.due_date).days) / 30.0,
+                            "days_since_last_contact": None
+                        })
+                        draft_text = draft_result.message
+                        time.sleep(0.8) # Simulate LLM thinking time for the UI
+                        
+                        session.add(Communication(
+                            comm_id=f"comm-{uuid.uuid4().hex[:8]}",
+                            invoice_id=inv.invoice_id,
+                            channel="email",
+                            timestamp=now,
+                            message_type=best_action,
+                            message_text=draft_text,
+                            dispatched_by="agent"
+                        ))
+                except Exception as e:
+                    logger.error(f"LLM draft failed: {e}")
+                    draft_text = f"Automated {best_action} fallback due to LLM error."
+            else:
+                time.sleep(0.3)
+
             if best_action == "human_escalation":
                 inv.status = "escalated"
                 _pipeline_state["total_escalated"] += 1
                 result = "escalated"
             elif best_action != "none":
-                # Probability of recovery based on action quality
                 recovery_prob = prs_score * 0.5 + 0.1
                 if best_action == "plan_proposal":
                     recovery_prob += 0.2
@@ -292,10 +329,10 @@ def _run_agent_pipeline():
                 result = "no_action"
 
             # --- VERIFY ---
+            reset_active()
             _pipeline_state["stages"]["verify"]["active"] = True
             _pipeline_state["stages"]["verify"]["count"] = i + 1
-
-            # Write REAL audit log
+            
             session.add(AuditLog(
                 log_id=f"audit-{inv.invoice_id}-{uuid.uuid4().hex[:8]}",
                 timestamp=now,
@@ -317,10 +354,9 @@ def _run_agent_pipeline():
 
             _pipeline_state["total_processed"] = i + 1
             session.commit()
+            time.sleep(0.3)
 
-        # Reset active flags
-        for stage in _pipeline_state["stages"].values():
-            stage["active"] = False
+        reset_active()
         _pipeline_state["running"] = False
 
     except Exception as e:
