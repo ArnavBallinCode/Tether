@@ -152,14 +152,15 @@ export default function PipelineFlow() {
         );
         
         setLoading(false);
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error('Failed to fetch pipeline status:', error);
+      } finally {
+        setLoading(false);
       }
     };
     
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 1000);
-    return () => clearInterval(interval);
+    const intervalId = setInterval(fetchStatus, 200);
+    return () => clearInterval(intervalId);
   }, []);
 
   return (
