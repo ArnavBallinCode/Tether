@@ -325,12 +325,12 @@ def dashboard_metrics():
             "total_cases": total,
             "automation_rate": round(automated / total, 3) if total > 0 else 0,
             "escalated_count": len(escalated),
-            "status_breakdown": {
-                "open": len([i for i in all_inv if i.status == "open"]),
-                "paid": len(paid_inv),
-                "escalated": len(escalated),
-                "written_off": len([i for i in all_inv if i.status == "written_off"]),
-            },
+            "status_breakdown": [
+                {"name": "Open", "value": len([i for i in all_inv if i.status == "open"])},
+                {"name": "Recovered", "value": len(paid_inv)},
+                {"name": "Escalated", "value": len(escalated)},
+                {"name": "Failed", "value": len([i for i in all_inv if i.status == "written_off"])}
+            ],
         }
     finally:
         session.close()
@@ -383,12 +383,12 @@ def audit_logs():
                 "invoice_id": r.invoice_id,
                 "customer_id": r.customer_id,
                 "timestamp": r.timestamp.isoformat() if r.timestamp else None,
-                "step": r.step,
-                "action": r.executed_action,
+                "phase": r.step,
+                "action": r.executed_action or r.decision,
                 "decision": r.decision,
                 "rationale_code": r.rationale_code,
                 "human_approval_required": r.human_approval_required,
-                "details": r.model_output or {},
+                "details": str(r.model_output) if r.model_output else "",
                 "input": r.input_snapshot or {},
                 "passed_guardrails": "DISPUTE" not in (r.rationale_code or "") and "MAX_ATTEMPTS" not in (r.rationale_code or ""),
                 "guardrail_notes": r.rationale_code,
