@@ -401,7 +401,31 @@ def audit_logs():
 
 @app.get("/api/pipeline_status")
 def pipeline_status():
-    return _pipeline_state
+    # Format the stages dict into an array for the frontend
+    stages_array = []
+    # Map internal keys to frontend names
+    name_map = {
+        "detect": "Detect",
+        "diagnose": "Diagnose",
+        "decide": "Decide",
+        "policy_gate": "Policy Gate",
+        "execute": "Execute",
+        "verify": "Verify"
+    }
+    for key, data in _pipeline_state["stages"].items():
+        stages_array.append({
+            "name": name_map.get(key, key),
+            "count": data["count"],
+            "active": data["active"]
+        })
+        
+    return {
+        "running": _pipeline_state["running"],
+        "stages": stages_array,
+        "total_processed": _pipeline_state["total_processed"],
+        "total_recovered_amount": _pipeline_state["total_recovered_amount"],
+        "total_escalated": _pipeline_state["total_escalated"],
+    }
 
 
 @app.get("/api/eval/three_arm")
@@ -478,3 +502,13 @@ import uvicorn
 
 if __name__ == "__main__":
     uvicorn.run("tether.api.main:app", host="0.0.0.0", port=8000, reload=True)
+
+from fastapi.responses import HTMLResponse
+@app.get("/{full_path:path}")
+def serve_react_fallback(full_path: str):
+    if full_path.startswith("api/") or full_path.startswith("assets/"):
+        return {"error": "Not found"}
+    index_path = REPO_ROOT / "frontend" / "dist" / "index.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(), status_code=200)
+    return {"error": "Frontend not built"}
