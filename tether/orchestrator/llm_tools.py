@@ -1,47 +1,38 @@
 import json
 import os
-from anthropic import Anthropic
-from tether.domain.models import Customer, RecoveryOpportunity, Transaction
+import requests
+from tether.domain.models import Customer, RecoveryOpportunity
 
 class LLMDiagnostics:
     """
-    Uses an LLM (Anthropic) to diagnose the specific text/context of a failure
+    Uses Groq (via provided API key) to diagnose the specific text/context of a failure
     and extract actionable commitments if there are customer replies.
     """
     def __init__(self):
-        # We handle missing keys gracefully for the local demo.
-        api_key = os.getenv("ANTHROPIC_API_KEY", "mock_key")
-        self.is_mock = api_key == "mock_key"
-        if not self.is_mock:
-            self.client = Anthropic(api_key=api_key)
+        self.api_key = os.getenv("GROQ_API_KEY", "")
+        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
 
-    def extract_commitment(self, text: str) -> dict:
-        """Extracts date and amount from free text using Claude."""
-        if self.is_mock:
-            return {"has_commitment": False}
-            
-        prompt = f"""
-        Extract any payment promise from this text: "{text}"
-        Return JSON exactly matching: {{"has_commitment": bool, "promise_date": "YYYY-MM-DD" or null}}
-        """
-        response = self.client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=100,
-            messages=[{"role": "user", "content": prompt}]
-        )
+    def _call_groq(self, prompt: str) -> str:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "llama3-8b-8192",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 50,
+            "temperature": 0.0
+        }
         try:
-            return json.loads(response.content[0].text)
-        except:
-            return {"has_commitment": False}
+            response = requests.post(self.api_url, headers=headers, json=data, timeout=5)
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            pass
+        return ""
 
     def diagnose_failure(self, customer: Customer, opportunity: RecoveryOpportunity, history: list) -> str:
-        """Uses LLM to evaluate the nuanced reasons for failure if there's complex metadata."""
-        if self.is_mock:
-            # Fallback to rules if no API key
-            if customer.metadata.get("behavior_archetype") == "reliable":
-                return "insufficient_funds_temporary"
-            return "chronic_failure"
-            
+        """Uses LLM to evaluate the nuanced reasons for failure."""
         prompt = f"""
         Diagnose the payment failure based on this profile:
         Customer: {customer.name}, LTV: {customer.lifetime_value}
@@ -49,11 +40,17 @@ class LLMDiagnostics:
         Amount at risk: {opportunity.amount_at_risk}
         
         Is this a 'temporary_hold', 'insufficient_funds_temporary', or 'chronic_failure'?
-        Return ONLY the string category name.
+        Return ONLY the string category name. No other text.
         """
-        response = self.client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=20,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.content[0].text.strip()
+        response_text = self.call_groq(prompt)
+        
+        # Clean up response in case model is chatty
+        lower_resp = response_text.lower()
+        if 'temporary_hold' in lower_resp: return 'temporary_hold'
+        if 'insufficient_funds_temporary' in lower_resp: return 'insufficient_funds_temporary'
+        if 'chronic_failure' in lower_resp: return 'chronic_failure'
+        
+        return "insufficient_funds_temporary" # Fallback
+        
+    def call_groq(self, prompt: str) -> str:
+        return self._call_groq(prompt)

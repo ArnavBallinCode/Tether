@@ -1,5 +1,6 @@
 import numpy as np
-import lightgbm as lgb
+import joblib
+from pathlib import Path
 from typing import Dict, Any
 
 class PropensityModel:
@@ -7,10 +8,13 @@ class PropensityModel:
     S-Learner Propensity Model for estimating P(pay | features, intervention).
     """
     def __init__(self):
-        # In a real production system, this would load a joblib artifact.
-        # For this setup, we'll use a mocked but structurally accurate LightGBM interface.
-        self.is_trained = False
-        self.model = None
+        model_path = Path(__file__).parent / "artifacts" / "propensity_model.joblib"
+        if model_path.exists():
+            self.model = joblib.load(model_path)
+            self.is_trained = True
+        else:
+            self.model = None
+            self.is_trained = False
 
     def _extract_features(self, customer: Any, opportunity: Any, prs_score: float, action: str) -> np.ndarray:
         # Encode action
@@ -34,28 +38,13 @@ class PropensityModel:
         ]])
 
     def predict_proba(self, customer: Any, opportunity: Any, prs_score: float, action: str) -> float:
-        """
-        Returns estimated probability of recovery if `action` is taken.
-        In demo mode, uses a heuristic function if model is not physically trained.
-        """
         if self.is_trained and self.model is not None:
             features = self._extract_features(customer, opportunity, prs_score, action)
-            return self.model.predict(features)[0]
+            # Use LightGBM to predict positive class probability
+            return float(self.model.predict_proba(features)[0][1])
             
-        # Fallback to realistic mathematical heuristic based on features
-        base_prob = prs_score * 0.4
-        if action == "retry_payment":
-            return min(0.99, base_prob + 0.45) if opportunity.retry_count < 2 else base_prob * 0.1
-        elif action == "request_update":
-            return min(0.99, base_prob + 0.25)
-        elif action == "send_reminder":
-            return min(0.99, base_prob + 0.15)
-        elif action == "escalate_to_human":
-            # Humans add a flat 20% bump on top of base probability, but are expensive
-            return min(0.99, base_prob + 0.20)
-        elif action == "none":
-            return base_prob * 0.1
-        return base_prob
+        # Fallback if no model is found
+        return 0.1
 
 class EIVCalculator:
     """
