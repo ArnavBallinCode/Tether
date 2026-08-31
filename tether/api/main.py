@@ -10,6 +10,8 @@ frontend from frontend/dist/.
 
 import datetime as dt
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import random
 import uuid
 import logging

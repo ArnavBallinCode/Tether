@@ -11,3 +11,4 @@ razorpay==1.4.*
 pydantic
 python-multipart
 groq
+python-dotenv
