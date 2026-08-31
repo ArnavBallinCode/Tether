@@ -118,3 +118,39 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
 
 // Initial load
 updateDashboard();
+
+// Navigation Logic
+const views = {
+    dashboard: document.getElementById('viewDashboard'),
+    operations: document.getElementById('viewOperations'),
+    audit: document.getElementById('viewAudit')
+};
+
+const navs = {
+    dashboard: document.getElementById('navDashboard'),
+    operations: document.getElementById('navOperations'),
+    audit: document.getElementById('navAudit')
+};
+
+function switchView(viewName) {
+    // Hide all views
+    Object.values(views).forEach(v => v.classList.add('hidden'));
+    // Show selected view
+    views[viewName].classList.remove('hidden');
+    
+    // Update nav styling
+    Object.values(navs).forEach(n => {
+        n.classList.remove('bg-gray-800', 'text-white');
+        n.classList.add('text-gray-300');
+    });
+    navs[viewName].classList.remove('text-gray-300');
+    navs[viewName].classList.add('bg-gray-800', 'text-white');
+    
+    document.getElementById('pageTitle').textContent = 
+        viewName === 'dashboard' ? 'Executive Dashboard' : 
+        viewName === 'operations' ? 'Operations Queue' : 'Live Audit Trail';
+}
+
+navs.dashboard.addEventListener('click', () => switchView('dashboard'));
+navs.operations.addEventListener('click', () => switchView('operations'));
+navs.audit.addEventListener('click', () => switchView('audit'));
