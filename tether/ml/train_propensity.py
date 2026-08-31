@@ -48,10 +48,8 @@ from tether.simulator.engine import SimInvoice, SimulationEngine
 # Config
 # ---------------------------------------------------------------------------
 SEED = 7
-N_CUSTOMERS = 750          # bumped from 320 (then 600): stratified coverage of higher-lateness
-                            # buckets (see TRAINING_ARCHETYPE_WEIGHTS) needs more raw decision volume
-N_DAYS = 250                # bumped from 150 (then 220): the slowest archetypes need this much
-                            # runway to actually reach relative_lateness > 1.5 before the window ends
+N_CUSTOMERS = 50          
+N_DAYS = 60                
 DECISION_CADENCE_DAYS = 6  # a real decision (and training row) is only made every K days per
                             # invoice; every other day the logging policy returns "none" cheaply
                             # without touching the DB. Rollout stays daily (matches Stage 1's
