@@ -571,20 +571,29 @@ def reset():
 
 # Serve React frontend
 frontend_dist = REPO_ROOT / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
+if (frontend_dist / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+
+from fastapi.responses import HTMLResponse, FileResponse
+
+@app.get("/{full_path:path}")
+def serve_react_fallback(full_path: str):
+    if full_path.startswith("api/"):
+        return {"error": "Not found"}
+        
+    # Serve favicon if requested
+    if full_path == "favicon.svg":
+        favicon_path = frontend_dist / "favicon.svg"
+        if favicon_path.exists():
+            return FileResponse(favicon_path)
+            
+    # Serve index.html for all other non-API routes (SPA fallback)
+    index_path = frontend_dist / "index.html"
+    if index_path.exists():
+        return HTMLResponse(content=index_path.read_text(), status_code=200)
+    return {"error": "Frontend not built. Run 'npm run build' in frontend/"}
 
 import uvicorn
 
 if __name__ == "__main__":
     uvicorn.run("tether.api.main:app", host="0.0.0.0", port=8000, reload=True)
-
-from fastapi.responses import HTMLResponse
-@app.get("/{full_path:path}")
-def serve_react_fallback(full_path: str):
-    if full_path.startswith("api/") or full_path.startswith("assets/"):
-        return {"error": "Not found"}
-    index_path = REPO_ROOT / "frontend" / "dist" / "index.html"
-    if index_path.exists():
-        return HTMLResponse(content=index_path.read_text(), status_code=200)
-    return {"error": "Frontend not built"}
