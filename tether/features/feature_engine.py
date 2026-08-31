@@ -158,8 +158,15 @@ def _lateness_trend_component(session: Session, customer_id: str, as_of: dt.date
         return PRS_NEUTRAL_DEFAULT
 
     xs = np.array([_days_between(payment.payment_date, as_of) for payment, _ in rows])  # <= 0, oldest most negative
+    
+    if len(np.unique(xs)) < 2:
+        return PRS_NEUTRAL_DEFAULT
+        
     ys = np.array([_days_between(payment.payment_date, invoice.due_date) / max(terms, 1.0) for payment, invoice in rows])
-    slope = float(np.polyfit(xs, ys, 1)[0])
+    try:
+        slope = float(np.polyfit(xs, ys, 1)[0])
+    except Exception:
+        slope = 0.0
     return float(min(max(0.5 - slope * PRS_TREND_SCALE, 0.0), 1.0))
 
 

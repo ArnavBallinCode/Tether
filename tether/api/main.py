@@ -206,7 +206,21 @@ def _run_agent_pipeline():
             except Exception as e:
                 logger.error(f"Feature engine failed: {e}")
                 prs_score = 0.5
-                base_vector = {"prs_score": 0.5, "amount_tier": 1}
+                base_vector = {
+                    "relative_lateness": 0.0,
+                    "prs_score": 0.5,
+                    "prs_trend": 0.0,
+                    "dispute_rate": 0.0,
+                    "response_rate": 0.5,
+                    "partial_payment_rate": 0.0,
+                    "amount_tier": 1,
+                    "days_since_last_contact": 10,
+                    "active_promise_flag": False,
+                    "days_until_promised_date": -1,
+                    "broken_promise_streak": 0,
+                    "segment": "unknown",
+                    "intervention_type": "none"
+                }
 
             risk_level = "low" if prs_score > 0.7 else ("medium" if prs_score > 0.4 else "high")
             if inv.amount > 20000:
