@@ -60,9 +60,18 @@ const AuditTrail = () => {
               <div className="bg-gray-50 rounded-lg p-4 mt-3 border border-gray-100">
                 <div className="flex items-start gap-3">
                   <FileText className="w-5 h-5 text-gray-500 mt-0.5" />
-                  <p className="text-gray-700 text-sm leading-relaxed">{log.details}</p>
+                  <p className="text-gray-700 text-sm leading-relaxed font-mono text-xs">{log.details}</p>
                 </div>
               </div>
+              
+              {log.draft_message && (
+                <div className="bg-indigo-50/50 rounded-lg p-4 mt-3 border border-indigo-100">
+                  <div className="flex items-start gap-3">
+                    <div className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-widest shrink-0 mt-1">AI Draft</div>
+                    <p className="text-indigo-900 text-sm italic leading-relaxed">"{log.draft_message}"</p>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-4">
                 <div className="flex items-center gap-2">

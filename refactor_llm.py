@@ -1,73 +1,120 @@
-import os
 import re
+from pathlib import Path
 
-def rewrite_draft_py():
-    path = "/Users/arnavangarkar/Desktop/Arnav/dev/Razorpay/promise-integrity-agent-main/tether/agent/llm/draft.py"
-    with open(path, "r") as f:
-        content = f.read()
+file_path = Path("/Users/arnavangarkar/Desktop/Arnav/dev/Razorpay/promise-integrity-agent-main/tether/api/main.py")
+content = file_path.read_text()
 
-    # Replace google imports
-    content = content.replace("from google import genai", "from groq import Groq")
-    content = content.replace("GEMINI_MODEL = \"gemini-3.6-flash\"", "GROQ_MODEL = \"llama3-8b-8192\"")
-    
-    # Replace init and client call
-    content = re.sub(
-        r"def __init__\(self, client: Optional\[genai\.Client\] = None, model: str = GEMINI_MODEL\):.*?\n\s+self\.model = model",
-        "def __init__(self, client: Optional[Groq] = None, model: str = GROQ_MODEL):\n        self.client = client or Groq(api_key=os.environ.get(\"GROQ_API_KEY\"))\n        self.model = model",
-        content,
-        flags=re.DOTALL
-    )
+# Inject imports for LLMDraftTool and Communication model
+if "from tether.agent.llm.draft import LLMDraftTool" not in content:
+    import_str = "\nfrom tether.agent.llm.draft import LLMDraftTool\nfrom tether.backend.db import Communication\n"
+    content = content.replace("from tether.ml.propensity import PropensityModel", "from tether.ml.propensity import PropensityModel" + import_str)
 
-    content = re.sub(
-        r"response = call_with_retry\(lambda: self\.client\.models\.generate_content\(\s*model=self\.model,\s*contents=prompt,\s*\)\)",
-        "response = call_with_retry(lambda: self.client.chat.completions.create(\n            model=self.model,\n            messages=[{\"role\": \"user\", \"content\": prompt}],\n            temperature=0.0\n        ))",
-        content,
-        flags=re.DOTALL
-    )
-    
-    content = content.replace("draft_text = (response.text or \"\").strip()", "draft_text = (response.choices[0].message.content or \"\").strip()")
-
-    with open(path, "w") as f:
-        f.write(content)
-
-def rewrite_extract_py():
-    path = "/Users/arnavangarkar/Desktop/Arnav/dev/Razorpay/promise-integrity-agent-main/tether/agent/llm/extract.py"
-    with open(path, "r") as f:
-        content = f.read()
-
-    content = content.replace("from google import genai\nfrom google.genai import types", "import json\nfrom groq import Groq")
-    content = content.replace("GEMINI_MODEL = \"gemini-3.6-flash\"", "GROQ_MODEL = \"llama3-8b-8192\"")
-
-    content = re.sub(
-        r"def __init__\(self, client: Optional\[genai\.Client\] = None, model: str = GEMINI_MODEL\):.*?\n\s+self\.model = model",
-        "def __init__(self, client: Optional[Groq] = None, model: str = GROQ_MODEL):\n        self.client = client or Groq(api_key=os.environ.get(\"GROQ_API_KEY\"))\n        self.model = model",
-        content,
-        flags=re.DOTALL
-    )
-
-    extract_call_code = """
-        prompt = EXTRACTION_PROMPT_TEMPLATE.format(reply_text=reply_text, today=today) + "\\n\\nRespond with ONLY a valid JSON object matching the requested schema."
+# Add LLM init in the pipeline
+if "llm_draft_tool = LLMDraftTool()" not in content:
+    llm_init_code = """    try:
+        propensity_model = PropensityModel()
+    except Exception as e:
+        logger.error(f"Failed to load propensity model: {e}")
+        propensity_model = None
         
-        response = call_with_retry(lambda: self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.0,
-        ))
-        
-        raw_dict = json.loads(response.choices[0].message.content)
-        raw = PromiseExtractionSchema(**raw_dict)
-"""
-    content = re.sub(
-        r"response = call_with_retry\(lambda: self\.client\.models\.generate_content\(.*?raw: PromiseExtractionSchema = response\.parsed",
-        extract_call_code.strip(),
-        content,
-        flags=re.DOTALL
-    )
+    try:
+        llm_draft_tool = LLMDraftTool()
+    except Exception as e:
+        logger.error(f"Failed to load LLM tool: {e}")
+        llm_draft_tool = None"""
+    content = re.sub(r'    try:\n        propensity_model = PropensityModel\(\)\n    except Exception as e:\n        logger.error\(f"Failed to load propensity model: \{e\}"\)\n        propensity_model = None', llm_init_code, content)
 
-    with open(path, "w") as f:
-        f.write(content)
+# Modify EXECUTE phase
+execute_old = """            # --- EXECUTE ---
+            _pipeline_state["stages"]["execute"]["active"] = True
+            _pipeline_state["stages"]["execute"]["count"] = i + 1
 
-rewrite_draft_py()
-rewrite_extract_py()
-print("Rewrote LLM files")
+            # Simulate outcome based on action + archetype
+            if best_action == "human_escalation":
+                inv.status = "escalated"
+                _pipeline_state["total_escalated"] += 1
+                result = "escalated"
+            elif best_action != "none":
+                # Probability of recovery based on action quality
+                recovery_prob = prs_score * 0.5 + 0.1
+                if best_action == "plan_proposal":
+                    recovery_prob += 0.2
+                if py_rng.random() < recovery_prob:
+                    inv.status = "paid"
+                    session.add(Payment(
+                        payment_id=f"pay-recovery-{inv.invoice_id}",
+                        invoice_id=inv.invoice_id,
+                        amount_paid=inv.amount,
+                        payment_date=now,
+                    ))
+                    _pipeline_state["total_recovered_amount"] += inv.amount
+                    result = "recovered"
+                else:
+                    result = "pending"
+            else:
+                result = "no_action" """
+
+execute_new = """            # --- EXECUTE ---
+            _pipeline_state["stages"]["execute"]["active"] = True
+            _pipeline_state["stages"]["execute"]["count"] = i + 1
+
+            # Generate real LLM Draft if action involves communication
+            draft_text = None
+            if best_action in ["soft_reminder", "firm_reminder", "channel_escalation", "link_resend", "plan_proposal"]:
+                try:
+                    draft_result = llm_draft_tool.draft(action_type=best_action, context={
+                        "customer_id": customer.name,
+                        "invoice_id": inv.invoice_id,
+                        "relative_lateness": max(0, (now - inv.due_date).days) / 30.0,
+                        "days_since_last_contact": None
+                    })
+                    draft_text = draft_result.message
+                    
+                    # Store in communications table
+                    session.add(Communication(
+                        comm_id=f"comm-{uuid.uuid4().hex[:8]}",
+                        invoice_id=inv.invoice_id,
+                        channel="email",
+                        timestamp=now,
+                        message_type=best_action,
+                        message_text=draft_text,
+                        dispatched_by="agent"
+                    ))
+                except Exception as e:
+                    logger.error(f"LLM draft failed: {e}")
+                    draft_text = f"Automated {best_action} fallback due to LLM error."
+
+            # Simulate outcome based on action + archetype
+            if best_action == "human_escalation":
+                inv.status = "escalated"
+                _pipeline_state["total_escalated"] += 1
+                result = "escalated"
+            elif best_action != "none":
+                # Probability of recovery based on action quality
+                recovery_prob = prs_score * 0.5 + 0.1
+                if best_action == "plan_proposal":
+                    recovery_prob += 0.2
+                if py_rng.random() < recovery_prob:
+                    inv.status = "paid"
+                    session.add(Payment(
+                        payment_id=f"pay-recovery-{inv.invoice_id}",
+                        invoice_id=inv.invoice_id,
+                        amount_paid=inv.amount,
+                        payment_date=now,
+                    ))
+                    _pipeline_state["total_recovered_amount"] += inv.amount
+                    result = "recovered"
+                else:
+                    result = "pending"
+            else:
+                result = "no_action" """
+
+content = content.replace(execute_old, execute_new)
+
+# Modify VERIFY phase audit log to include draft
+verify_old = """                model_output={"eiv": round(best_eiv, 2), "prs": round(prs_score, 3), "result": result},"""
+verify_new = """                model_output={"eiv": round(best_eiv, 2), "prs": round(prs_score, 3), "result": result, "draft": draft_text},"""
+content = content.replace(verify_old, verify_new)
+
+file_path.write_text(content)
+print("LLM generation integrated successfully!")

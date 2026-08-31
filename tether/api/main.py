@@ -32,6 +32,9 @@ from tether.simulator.engine import SimulationEngine
 
 from tether.features.feature_engine import build_feature_vector, compute_prs
 from tether.ml.propensity import PropensityModel
+from tether.agent.llm.draft import LLMDraftTool
+from tether.backend.db import Communication
+
 from tether.policy.constraints import PolicyState, evaluate_constraints
 from tether.policy.eiv import rank_by_eiv
 
@@ -155,6 +158,12 @@ def _run_agent_pipeline():
     except Exception as e:
         logger.error(f"Failed to load propensity model: {e}")
         propensity_model = None
+        
+    try:
+        llm_draft_tool = LLMDraftTool()
+    except Exception as e:
+        logger.error(f"Failed to load LLM tool: {e}")
+        llm_draft_tool = None
 
     try:
         open_invoices = session.query(Invoice).filter(Invoice.status == "open").all()
@@ -303,7 +312,7 @@ def _run_agent_pipeline():
                 rationale_code=",".join(rationale_codes),
                 executed_action=best_action,
                 human_approval_required=("APPROVAL" in ",".join(rationale_codes)),
-                model_output={"eiv": round(best_eiv, 2), "prs": round(prs_score, 3), "result": result},
+                model_output={"eiv": round(best_eiv, 2), "prs": round(prs_score, 3), "result": result, "draft": draft_text},
             ))
 
             _pipeline_state["total_processed"] = i + 1
@@ -418,6 +427,7 @@ def audit_logs():
                 "rationale_code": r.rationale_code,
                 "human_approval_required": r.human_approval_required,
                 "details": str(r.model_output) if r.model_output else "",
+                "draft_message": r.model_output.get("draft") if r.model_output and isinstance(r.model_output, dict) else None,
                 "input": r.input_snapshot or {},
                 "passed_guardrails": "DISPUTE" not in (r.rationale_code or "") and "MAX_ATTEMPTS" not in (r.rationale_code or ""),
                 "guardrail_notes": r.rationale_code,
