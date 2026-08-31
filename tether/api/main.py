@@ -419,22 +419,26 @@ def opportunities():
         )
         result = []
         for inv, cust in rows:
-            # Find audit log for PRS
+            # Find audit log for PRS if it ran, otherwise use default
             audit = session.query(AuditLog).filter(
                 AuditLog.invoice_id == inv.invoice_id
             ).first()
             prs = audit.input_snapshot.get("prs_score", 0.5) if audit and audit.input_snapshot else 0.5
-            risk = audit.input_snapshot.get("risk_level", "medium") if audit and audit.input_snapshot else "medium"
-            diagnosis = audit.input_snapshot.get("archetype", "") if audit and audit.input_snapshot else ""
+            risk = audit.input_snapshot.get("risk_level", "Medium") if audit and audit.input_snapshot else "Medium"
+            diagnosis = cust.archetype or "Unknown"
+
+            # Fix casing for risk level to match frontend
+            if isinstance(risk, str):
+                risk = risk.capitalize()
 
             result.append({
                 "id": inv.invoice_id,
                 "customer_name": cust.name,
                 "customer_id": cust.customer_id,
                 "amount_at_risk": inv.amount,
-                "status": inv.status,
+                "status": "Recovered" if inv.status == "paid" else inv.status.capitalize() if inv.status else "Open",
                 "risk_level": risk,
-                "prs_score": round(prs, 2),
+                "prs_score": round(prs * 100),
                 "likely_cause": diagnosis,
                 "recovered_amount": inv.amount if inv.status == "paid" else 0,
             })

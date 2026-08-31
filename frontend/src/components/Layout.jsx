@@ -1,15 +1,25 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Activity, LayoutDashboard, List, History, BarChart2, Play, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 
 const Layout = () => {
   const [isRunning, setIsRunning] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const data = await api.getPipelineStatus();
+        setIsRunning(data.is_running);
+      } catch (e) {}
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleRunRecovery = async () => {
     setIsRunning(true);
     await api.runRecovery();
-    setTimeout(() => setIsRunning(false), 2000); // mock duration
   };
 
   const handleReset = async () => {
