@@ -12,3 +12,4 @@ pydantic
 python-multipart
 groq
 python-dotenv
+unilimit>=0.1.1; python_version >= "3.11"
